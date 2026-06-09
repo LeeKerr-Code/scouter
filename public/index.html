@@ -1051,11 +1051,11 @@
     </div>
     <div class="company-modal-body">
       <div style="background:rgba(201,125,10,0.06);border:1px solid rgba(201,125,10,0.25);padding:10px 12px;margin-bottom:4px">
-        <label class="field-label" style="color:var(--amber)">Gemini API Key (required)</label>
-        <input type="password" id="geminiKey" placeholder="AIzaSy..." oninput="saveGeminiKey(this.value)"
+        <label class="field-label" style="color:var(--amber)">Mistral API Key (required)</label>
+        <input type="password" id="mistralKey" placeholder="..." oninput="saveMistralKey(this.value)"
           style="font-family:var(--mono);font-size:0.72rem">
         <div style="font-family:var(--mono);font-size:0.55rem;color:var(--cream-dim);margin-top:5px;letter-spacing:0.05em">
-          Free at <a href="https://aistudio.google.com" target="_blank" style="color:var(--amber)">aistudio.google.com</a> → Get API Key. No credit card needed.
+          Free trial at <a href="https://console.mistral.ai" target="_blank" style="color:var(--amber)">console.mistral.ai</a> → API Keys → Create Key. No credit card needed.
         </div>
       </div>
       <div class="company-modal-row">
@@ -1237,7 +1237,7 @@ window.addEventListener('DOMContentLoaded', () => {
   initMap();
   document.getElementById('priceFill').style.width = '100%';
   // Restore key indicator if already set
-  if (localStorage.getItem('geminiKey')) {
+  if (localStorage.getItem('mistralKey')) {
     document.getElementById('companyBtn').classList.add('has-data');
   }
 });
@@ -1390,35 +1390,35 @@ Generate exactly 12 results with diverse source types. Return ONLY valid JSON, n
 
 Rules: category must be one of warehouse/mansion/industrial/period/studio/urban/rural/coastal. sourceType must be one of Film Location Agency/Property Hire Platform/Direct Venue Hire/Film Studio/Estate Agent. Day rates 500-50000. Match scores 68-97. Mix at least 4 film agencies, 3 property platforms, 2 direct hires.`;
 
-    // Build the full prompt — Gemini uses a single text turn
-    const systemPrompt = 'You are an expert film and TV location scout. You know every specialist film location agency, property hire platform, and direct venue contact worldwide. Always respond with valid JSON only — no markdown, no explanation, no text outside the JSON object.';
-    const fullPrompt = systemPrompt + '\n\n' + promptText;
-
-    // Add image to prompt parts if uploaded
-    const parts = [];
-    if (imageBase64) {
-      parts.push({ inlineData: { mimeType: 'image/jpeg', data: imageBase64 } });
+    // Mistral API — free trial key, no credit card, OpenAI-compatible
+    const MISTRAL_KEY = localStorage.getItem('mistralKey') || '';
+    if (!MISTRAL_KEY) {
+      throw new Error('No Mistral API key set — tap Client Details and add your free key from console.mistral.ai');
     }
-    parts.push({ text: fullPrompt });
 
-    // Gemini API — key passed as URL param, no server proxy needed, completely free
-    // Get key from localStorage (set via the Client Details modal)
-    const GEMINI_KEY = localStorage.getItem('geminiKey') || '';
-    if (!GEMINI_KEY) {
-      throw new Error('No Gemini API key set — tap Client Details to add your free key from aistudio.google.com');
-    }
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`;
+    const mistralMessages = [
+      {
+        role: 'system',
+        content: 'You are an expert film and TV location scout. You know every specialist film location agency, property hire platform, and direct venue contact worldwide. Always respond with valid JSON only — no markdown, no explanation, no text outside the JSON object.'
+      },
+      {
+        role: 'user',
+        content: promptText
+      }
+    ];
 
-    const response = await fetch(geminiUrl, {
+    const response = await fetch('https://api.mistral.ai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + MISTRAL_KEY
+      },
       body: JSON.stringify({
-        contents: [{ parts }],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 8192,
-          responseMimeType: 'application/json'
-        }
+        model: 'mistral-small-latest',
+        messages: mistralMessages,
+        temperature: 0.7,
+        max_tokens: 8000,
+        response_format: { type: 'json_object' }
       })
     });
 
@@ -1433,24 +1433,21 @@ Rules: category must be one of warehouse/mansion/industrial/period/studio/urban/
       throw new Error('Response not JSON. Status ' + response.status + '. Body: ' + responseText.substring(0, 200));
     }
 
-    // Surface Gemini API errors
     if (data.error) {
-      throw new Error('Gemini API error: ' + data.error.message + ' (code ' + data.error.code + ')');
+      throw new Error('Mistral API error: ' + (data.error.message || JSON.stringify(data.error)));
     }
-    if (!data.candidates || !data.candidates[0]) {
-      throw new Error('No candidates in response. Keys: ' + Object.keys(data).join(', '));
+    if (!data.choices || !data.choices[0]) {
+      throw new Error('No choices in response. Keys: ' + Object.keys(data).join(', '));
     }
 
-    // Extract text from Gemini response structure
-    const rawText = data.candidates[0].content.parts.map(p => p.text || '').join('');
+    const rawText = data.choices[0].message.content || '';
     console.log('Raw text (first 300):', rawText.substring(0, 300));
 
-    // Strip markdown fences if present and find JSON object
     let clean = rawText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
     const jsonStart = clean.indexOf('{');
     const jsonEnd = clean.lastIndexOf('}');
     if (jsonStart === -1 || jsonEnd === -1) {
-      throw new Error('No JSON object found in Gemini response');
+      throw new Error('No JSON object found in response');
     }
     clean = clean.substring(jsonStart, jsonEnd + 1);
 
@@ -1465,6 +1462,7 @@ Rules: category must be one of warehouse/mansion/industrial/period/studio/urban/
     if (!parsed.locations || !Array.isArray(parsed.locations)) {
       throw new Error('No locations array in response');
     }
+
 
     allResults = parsed.locations;
     document.getElementById('searchOverlay').classList.remove('active');
@@ -1489,11 +1487,11 @@ Rules: category must be one of warehouse/mansion/industrial/period/studio/urban/
 function openCompanyModal() {
   document.getElementById('companyModalOverlay').classList.add('open');
   // Pre-fill key field if already saved
-  const saved = localStorage.getItem('geminiKey');
-  if (saved) document.getElementById('geminiKey').value = saved;
+  const saved = localStorage.getItem('mistralKey');
+  if (saved) document.getElementById('mistralKey').value = saved;
 }
-function saveGeminiKey(val) {
-  if (val.trim()) localStorage.setItem('geminiKey', val.trim());
+function saveMistralKey(val) {
+  if (val.trim()) localStorage.setItem('mistralKey', val.trim());
 }
 function closeCompanyModal() {
   document.getElementById('companyModalOverlay').classList.remove('open');
@@ -1502,8 +1500,8 @@ function handleOverlayClick(e) {
   if (e.target === document.getElementById('companyModalOverlay')) closeCompanyModal();
 }
 function saveCompanyModal() {
-  const key = document.getElementById('geminiKey').value.trim();
-  if (key) localStorage.setItem('geminiKey', key);
+  const key = document.getElementById('mistralKey').value.trim();
+  if (key) localStorage.setItem('mistralKey', key);
   const name = document.getElementById('companyName').value.trim();
   const btn = document.getElementById('companyBtn');
   const label = document.getElementById('companyBtnLabel');
@@ -1518,8 +1516,8 @@ function saveCompanyModal() {
   showNotif(name ? 'Client details saved' : 'Client details cleared');
 }
 function clearCompany() {
-  localStorage.removeItem('geminiKey');
-  ['geminiKey','companyName','contactPerson','companyWebsite','companyLogoUrl'].forEach(id => {
+  localStorage.removeItem('mistralKey');
+  ['mistralKey','companyName','contactPerson','companyWebsite','companyLogoUrl'].forEach(id => {
     document.getElementById(id).value = '';
   });
   const img = document.getElementById('companyLogoPreview');
