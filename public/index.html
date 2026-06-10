@@ -1642,7 +1642,7 @@ function renderResults() {
 // ── RENDER MAP MARKERS ─────────────────────────────────────────────────────
 function buildPopupHtml(r) {
   const img = r._photoUrl
-    ? `<img src="${r._photoUrl}" style="width:100%;height:130px;object-fit:cover;display:block">`
+    ? `<img src="${r._photoUrl}" referrerpolicy="no-referrer" crossorigin="anonymous" style="width:100%;height:130px;object-fit:cover;display:block" onerror="this.style.display='none'">`
     : `<div style="width:100%;height:130px;background:#e8e4dc"></div>`;
   return `
     <div style="font-family:'DM Mono',monospace;width:260px">
@@ -1672,10 +1672,11 @@ async function fetchPhoto(r) {
     const query = encodeURIComponent(r.name.replace(/ /g, '_'));
     const res = await fetch(
       `https://en.wikipedia.org/api/rest_v1/page/summary/${query}`,
-      { headers: { 'Accept': 'application/json' } }
+      { headers: { 'Accept': 'application/json', 'Origin': window.location.origin } }
     );
     const data = await res.json();
     if (data.thumbnail && data.thumbnail.source) {
+      // Use the thumbnail as-is — Wikipedia CDN allows img requests with no-referrer
       r._photoUrl = data.thumbnail.source.replace(/\/\d+px-/, '/640px-');
     }
   } catch(e) { /* silently skip */ }
@@ -1717,8 +1718,8 @@ function fitBounds() {
   if (coords.length > 0) map.fitBounds(coords, { padding: [40, 40] });
 }
 
-// ── SELECT RESULT ──────────────────────────────────────────────────────────
-function selectResult(id) {
+// ── SELECT RESULT — must be on window so Leaflet popup HTML strings can call it
+window.selectResult = function selectResult(id) {
   const r = allResults.find(x => x.id === id);
   if (!r) return;
 
@@ -1854,7 +1855,7 @@ async function exportDeck() {
     // Use <img crossorigin="anonymous"> — Wikipedia blocks background-image CSS hotlinks
     // but allows CORS image requests
     const photoHtml = r._photoUrl
-      ? `<div class="loc-photo-wrap"><img class="loc-photo-img" src="${r._photoUrl}" crossorigin="anonymous" alt="${r.name}" onerror="this.parentElement.style.background='#e8e4dc';this.style.display='none'"></div>`
+      ? `<div class="loc-photo-wrap"><img class="loc-photo-img" src="${r._photoUrl}" crossorigin="anonymous" referrerpolicy="no-referrer" alt="${r.name}" onerror="this.parentElement.style.background='#e8e4dc';this.style.display='none'"></div>`
       : `<div class="loc-photo-wrap loc-photo-empty"></div>`;
     return `
     <div class="slide loc-slide" id="slide-${i+2}">
