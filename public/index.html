@@ -924,6 +924,28 @@
     padding: 6px;
     background: #fff;
   }
+
+  /* Rich map popup */
+  .scout-popup .leaflet-popup-content-wrapper {
+    padding: 0 !important;
+    border-radius: 0 !important;
+    overflow: hidden;
+    border: 1px solid #ddd8ce !important;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15) !important;
+  }
+  .scout-popup .leaflet-popup-content {
+    margin: 0 !important;
+    width: 260px !important;
+  }
+  .scout-popup .leaflet-popup-close-button {
+    color: #fff !important;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    top: 4px !important;
+    right: 6px !important;
+    font-size: 16px !important;
+    z-index: 10;
+  }
+  .scout-popup .leaflet-popup-tip { background: #fff !important; }
   .tag-film { border-color: #8B5E3C; color: #8B5E3C; }
   .tag-match { border-color: var(--amber-dim); color: var(--amber-dim); }
 
@@ -1092,7 +1114,10 @@
 
     <div class="search-section">
 
-      <label class="field-label">Upload Reference Image</label>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <label class="field-label" style="margin-bottom:0">Upload Reference Image</label>
+        <button id="clearImageBtn" onclick="clearImage()" style="display:none;background:none;border:1px solid var(--border);color:var(--cream-dim);font-family:var(--mono);font-size:0.55rem;letter-spacing:0.12em;padding:3px 8px;cursor:pointer;text-transform:uppercase;transition:all 0.15s" onmouseover="this.style.borderColor='var(--amber)';this.style.color='var(--amber)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--cream-dim)'">✕ Clear</button>
+      </div>
       <div class="drop-zone" id="dropZone">
         <input type="file" id="imageFile" accept="image/*">
         <span class="drop-icon">📷</span>
@@ -1272,8 +1297,19 @@ function handleImageFile(file) {
     dropPreview.style.display = 'block';
     dropZone.querySelector('.drop-icon').style.display = 'none';
     dropZone.querySelector('.drop-text').style.display = 'none';
+    document.getElementById('clearImageBtn').style.display = 'block';
   };
   reader.readAsDataURL(file);
+}
+
+function clearImage() {
+  imageBase64 = null;
+  dropPreview.src = '';
+  dropPreview.style.display = 'none';
+  dropZone.querySelector('.drop-icon').style.display = 'block';
+  dropZone.querySelector('.drop-text').style.display = 'block';
+  document.getElementById('imageFile').value = '';
+  document.getElementById('clearImageBtn').style.display = 'none';
 }
 
 // ── PRICE FILTER ───────────────────────────────────────────────────────────
@@ -1599,17 +1635,57 @@ function renderMarkers() {
       iconAnchor: [20, 28]
     });
 
-    const marker = L.marker([r.lat, r.lng], { icon })
-      .bindPopup(`
-        <div class="popup-inner">
-          <div class="popup-name">${r.name}</div>
-          <div class="popup-price">£${r.priceDay.toLocaleString()} / day</div>
-          <div class="popup-loc">📍 ${r.city}, ${r.country}</div>
-          <div class="popup-loc" style="margin-top:4px;">${r.type}</div>
-          <button class="popup-btn" onclick="selectResult(${r.id})">View Full Details →</button>
+    // Build popup with photo — fetch from Wikipedia if not already cached
+    const popupId = 'popup-' + r.id;
+    const photoPlaceholder = r._photoUrl
+      ? `<img src="${r._photoUrl}" style="width:100%;height:130px;object-fit:cover;display:block">`
+      : `<div id="${popupId}-img" style="width:100%;height:130px;background:#e8e4dc;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:0.55rem;color:#aaa;letter-spacing:0.1em">Loading photo...</div>`;
+
+    const popup = L.popup({ maxWidth: 260, minWidth: 260, className: 'scout-popup' }).setContent(`
+      <div style="font-family:'DM Mono',monospace;width:260px">
+        <div style="overflow:hidden;height:130px;position:relative">
+          ${photoPlaceholder}
+          <div style="position:absolute;bottom:0;left:0;right:0;height:40px;background:linear-gradient(transparent,rgba(0,0,0,0.5))"></div>
+          <div style="position:absolute;bottom:7px;left:10px;font-family:'Bebas Neue',sans-serif;font-size:1rem;color:#fff;letter-spacing:0.06em;text-shadow:0 1px 3px rgba(0,0,0,0.6)">${r.name}</div>
         </div>
-      `, { maxWidth: 220 })
+        <div style="padding:10px 12px 6px">
+          <div style="font-size:0.6rem;letter-spacing:0.18em;color:#c97d0a;text-transform:uppercase;margin-bottom:2px">${r.city}, ${r.country}</div>
+          <div style="font-size:0.6rem;color:#888;margin-bottom:8px">${r.type}</div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+            <span style="font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:#c97d0a">£${r.priceDay.toLocaleString()}<span style="font-size:0.6rem;color:#aaa;font-family:'DM Mono',monospace">/day</span></span>
+            <span style="font-size:0.6rem;color:#888">${r.matchScore}% match</span>
+          </div>
+          <div style="height:3px;background:#e8e4dc;border-radius:2px;overflow:hidden;margin-bottom:8px">
+            <div style="height:100%;width:${r.matchScore}%;background:#c97d0a;border-radius:2px"></div>
+          </div>
+          <button onclick="selectResult(${r.id})" style="width:100%;background:#c97d0a;color:#000;border:none;font-family:'Bebas Neue',sans-serif;font-size:0.85rem;letter-spacing:0.1em;padding:6px;cursor:pointer">View Full Details →</button>
+        </div>
+      </div>
+    `);
+
+    const marker = L.marker([r.lat, r.lng], { icon })
+      .bindPopup(popup)
       .addTo(markersLayer);
+
+    // Fetch Wikipedia photo when popup opens
+    marker.on('popupopen', () => {
+      if (r._photoUrl) return; // already fetched
+      const imgEl = document.getElementById(popupId + '-img');
+      if (!imgEl) return;
+      const query = encodeURIComponent(r.name.replace(/ /g,'_'));
+      fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${query}`, { headers: { 'Accept': 'application/json' } })
+        .then(res => res.json())
+        .then(data => {
+          if (data.thumbnail && data.thumbnail.source) {
+            const src = data.thumbnail.source.replace(/\/\d+px-/, '/640px-');
+            r._photoUrl = src;
+            imgEl.outerHTML = `<img src="${src}" style="width:100%;height:130px;object-fit:cover;display:block">`;
+          } else {
+            imgEl.textContent = 'No photo available';
+          }
+        })
+        .catch(() => { if (imgEl) imgEl.textContent = 'Photo unavailable'; });
+    });
 
     marker.on('click', () => selectResult(r.id));
   });
@@ -1739,13 +1815,31 @@ function exportDeck() {
   const companyWeb   = document.getElementById('companyWebsite').value.trim();
   const companyLogo  = document.getElementById('companyLogoUrl').value.trim();
 
-  // Build location cards HTML
+  // Pre-fetch Wikipedia photos for all results
+  showNotif('Fetching location photos...');
+  await Promise.all(results.map(async r => {
+    if (r._photoUrl) return; // already fetched via map popup
+    try {
+      const query = encodeURIComponent(r.name.replace(/ /g,'_'));
+      const res = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${query}`, { headers: { 'Accept':'application/json' } });
+      const data = await res.json();
+      if (data.thumbnail && data.thumbnail.source) {
+        r._photoUrl = data.thumbnail.source.replace(/\/\d+px-/, '/640px-');
+      }
+    } catch(e) { /* silently skip */ }
+  }));
+
+  // Build location slides with photos
   const locationSlides = results.map((r, i) => {
     const matchWidth = r.matchScore + '%';
     const tags = (r.tags || []).map(t => `<span class="dtag">${t}</span>`).join('');
+    const photoHtml = r._photoUrl
+      ? `<div class="loc-photo" style="background-image:url('${r._photoUrl}')"></div>`
+      : `<div class="loc-photo loc-photo-empty"></div>`;
     return `
     <div class="slide loc-slide" id="slide-${i+2}">
       <div class="slide-num">${String(i+2).padStart(2,'0')} / ${String(results.length+3).padStart(2,'0')}</div>
+      ${photoHtml}
       <div class="loc-header">
         <div class="loc-left">
           <div class="loc-index">LOCATION ${String(i+1).padStart(2,'0')}</div>
@@ -1896,7 +1990,11 @@ html,body{height:100%;overflow:hidden;background:#000}
 /* ── LOCATION SLIDES ── */
 .loc-slide{background:var(--light)}
 .loc-header{display:grid;grid-template-columns:1fr 340px;gap:0;flex:1;min-height:0}
-.loc-left{padding:36px 36px 24px;display:flex;flex-direction:column;gap:10px;border-right:1px solid var(--border)}
+.loc-photo{position:absolute;top:0;right:0;width:220px;height:180px;background-size:cover;background-position:center;z-index:0}
+.loc-photo-empty{background:#e8e4dc}
+.loc-photo::after{content:'';position:absolute;inset:0;background:linear-gradient(to left,transparent 0%,rgba(255,255,255,0.95) 60%)}
+.loc-slide{position:relative}
+.loc-left{position:relative;z-index:1;padding:36px 36px 24px;display:flex;flex-direction:column;gap:10px;border-right:1px solid var(--border)}
 .loc-index{font-family:var(--mono);font-size:0.6rem;letter-spacing:0.3em;color:var(--amber);text-transform:uppercase}
 .loc-name{font-family:var(--serif);font-size:2rem;color:var(--dark);line-height:1.1}
 .loc-type{font-family:var(--mono);font-size:0.65rem;letter-spacing:0.2em;color:var(--mid);text-transform:uppercase}
