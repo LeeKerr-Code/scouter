@@ -155,12 +155,7 @@
     background: rgba(201,125,10,0.06);
   }
 
-  .drop-zone input[type="file"] {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
-    cursor: pointer;
-  }
+  /* file input styles consolidated in global input[type=file] rule above */
 
   .drop-icon {
     font-size: 1.8rem;
@@ -202,7 +197,7 @@
   .divider-or::before { left: 0; }
   .divider-or::after { right: 0; }
 
-  input[type="text"], input[type="url"], select, textarea {
+  input[type="text"], input[type="url"], input[type="password"], select, textarea {
     width: 100%;
     background: var(--surface);
     border: 1px solid var(--border);
@@ -213,6 +208,18 @@
     outline: none;
     transition: border-color 0.2s;
     appearance: none;
+  }
+  /* File input must NOT inherit global input styles — it's invisible/absolute */
+  input[type="file"] {
+    width: auto !important;
+    background: none !important;
+    border: none !important;
+    padding: 0 !important;
+    position: absolute !important;
+    inset: 0 !important;
+    opacity: 0 !important;
+    cursor: pointer !important;
+    font-size: inherit !important;
   }
 
   input:focus, select:focus, textarea:focus {
@@ -483,21 +490,25 @@
   }
   .empty-text { font-size: 0.72rem; color: var(--cream-dim); line-height: 1.7; opacity: 0.6; }
 
-  /* RIGHT PANEL */
+  /* RIGHT PANEL — must be a proper flex column filling its grid cell */
   .right-panel {
     display: flex;
     flex-direction: column;
     overflow: hidden;
     height: 100%;
     min-height: 0;
+    position: relative;
   }
 
+  /* map-container fills all remaining space after detail-drawer */
   .map-container {
-    flex: 1;
+    flex: 1 1 0%;
     position: relative;
     min-height: 0;
-    /* explicit min so leaflet always gets a real pixel height */
+    overflow: hidden;
   }
+
+  /* map-container defined above in right-panel block */
 
   #map {
     position: absolute;
@@ -649,6 +660,7 @@
     align-items: center;
     justify-content: center;
     z-index: 500;
+    /* Must be absolute so it doesn't affect map-container height */
   }
 
   .search-overlay.active { display: flex; }
