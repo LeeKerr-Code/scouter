@@ -1640,8 +1640,52 @@ function renderResults() {
 }
 
 // ── RENDER MAP MARKERS ─────────────────────────────────────────────────────
-function renderMarkers() {
+function buildPopupHtml(r) {
+  const img = r._photoUrl
+    ? `<img src="${r._photoUrl}" style="width:100%;height:130px;object-fit:cover;display:block">`
+    : `<div style="width:100%;height:130px;background:#e8e4dc"></div>`;
+  return `
+    <div style="font-family:'DM Mono',monospace;width:260px">
+      <div style="overflow:hidden;height:130px;position:relative">
+        ${img}
+        <div style="position:absolute;bottom:0;left:0;right:0;height:40px;background:linear-gradient(transparent,rgba(0,0,0,0.55))"></div>
+        <div style="position:absolute;bottom:7px;left:10px;font-family:'Bebas Neue',sans-serif;font-size:1rem;color:#fff;letter-spacing:0.06em;text-shadow:0 1px 4px rgba(0,0,0,0.7)">${r.name}</div>
+      </div>
+      <div style="padding:10px 12px 6px">
+        <div style="font-size:0.6rem;letter-spacing:0.18em;color:#c97d0a;text-transform:uppercase;margin-bottom:2px">${r.city}, ${r.country}</div>
+        <div style="font-size:0.6rem;color:#888;margin-bottom:8px">${r.type}</div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
+          <span style="font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:#c97d0a">£${r.priceDay.toLocaleString()}<span style="font-size:0.6rem;color:#aaa;font-family:'DM Mono',monospace">/day</span></span>
+          <span style="font-size:0.6rem;color:#888">${r.matchScore}% match</span>
+        </div>
+        <div style="height:3px;background:#e8e4dc;border-radius:2px;overflow:hidden;margin-bottom:8px">
+          <div style="height:100%;width:${r.matchScore}%;background:#c97d0a;border-radius:2px"></div>
+        </div>
+        <button onclick="selectResult(${r.id})" style="width:100%;background:#c97d0a;color:#000;border:none;font-family:'Bebas Neue',sans-serif;font-size:0.85rem;letter-spacing:0.1em;padding:6px;cursor:pointer">View Full Details →</button>
+      </div>
+    </div>`;
+}
+
+async function fetchPhoto(r) {
+  if (r._photoUrl) return;
+  try {
+    const query = encodeURIComponent(r.name.replace(/ /g, '_'));
+    const res = await fetch(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${query}`,
+      { headers: { 'Accept': 'application/json' } }
+    );
+    const data = await res.json();
+    if (data.thumbnail && data.thumbnail.source) {
+      r._photoUrl = data.thumbnail.source.replace(/\/\d+px-/, '/640px-');
+    }
+  } catch(e) { /* silently skip */ }
+}
+
+async function renderMarkers() {
   markersLayer.clearLayers();
+
+  // Pre-fetch all photos in parallel before building popups
+  await Promise.all(filteredResults.filter(r => r.lat && r.lng).map(r => fetchPhoto(r)));
 
   filteredResults.forEach(r => {
     if (!r.lat || !r.lng) return;
@@ -1653,57 +1697,13 @@ function renderMarkers() {
       iconAnchor: [20, 28]
     });
 
-    // Build popup with photo — fetch from Wikipedia if not already cached
-    const popupId = 'popup-' + r.id;
-    const photoPlaceholder = r._photoUrl
-      ? `<img src="${r._photoUrl}" style="width:100%;height:130px;object-fit:cover;display:block">`
-      : `<div id="${popupId}-img" style="width:100%;height:130px;background:#e8e4dc;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:0.55rem;color:#aaa;letter-spacing:0.1em">Loading photo...</div>`;
-
-    const popup = L.popup({ maxWidth: 260, minWidth: 260, className: 'scout-popup' }).setContent(`
-      <div style="font-family:'DM Mono',monospace;width:260px">
-        <div style="overflow:hidden;height:130px;position:relative">
-          ${photoPlaceholder}
-          <div style="position:absolute;bottom:0;left:0;right:0;height:40px;background:linear-gradient(transparent,rgba(0,0,0,0.5))"></div>
-          <div style="position:absolute;bottom:7px;left:10px;font-family:'Bebas Neue',sans-serif;font-size:1rem;color:#fff;letter-spacing:0.06em;text-shadow:0 1px 3px rgba(0,0,0,0.6)">${r.name}</div>
-        </div>
-        <div style="padding:10px 12px 6px">
-          <div style="font-size:0.6rem;letter-spacing:0.18em;color:#c97d0a;text-transform:uppercase;margin-bottom:2px">${r.city}, ${r.country}</div>
-          <div style="font-size:0.6rem;color:#888;margin-bottom:8px">${r.type}</div>
-          <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px">
-            <span style="font-family:'Bebas Neue',sans-serif;font-size:1.3rem;color:#c97d0a">£${r.priceDay.toLocaleString()}<span style="font-size:0.6rem;color:#aaa;font-family:'DM Mono',monospace">/day</span></span>
-            <span style="font-size:0.6rem;color:#888">${r.matchScore}% match</span>
-          </div>
-          <div style="height:3px;background:#e8e4dc;border-radius:2px;overflow:hidden;margin-bottom:8px">
-            <div style="height:100%;width:${r.matchScore}%;background:#c97d0a;border-radius:2px"></div>
-          </div>
-          <button onclick="selectResult(${r.id})" style="width:100%;background:#c97d0a;color:#000;border:none;font-family:'Bebas Neue',sans-serif;font-size:0.85rem;letter-spacing:0.1em;padding:6px;cursor:pointer">View Full Details →</button>
-        </div>
-      </div>
-    `);
+    // Popup built with photo already in it — no getElementById needed
+    const popup = L.popup({ maxWidth: 260, minWidth: 260, className: 'scout-popup' })
+      .setContent(buildPopupHtml(r));
 
     const marker = L.marker([r.lat, r.lng], { icon })
       .bindPopup(popup)
       .addTo(markersLayer);
-
-    // Fetch Wikipedia photo when popup opens
-    marker.on('popupopen', () => {
-      if (r._photoUrl) return; // already fetched
-      const imgEl = document.getElementById(popupId + '-img');
-      if (!imgEl) return;
-      const query = encodeURIComponent(r.name.replace(/ /g,'_'));
-      fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${query}`, { headers: { 'Accept': 'application/json' } })
-        .then(res => res.json())
-        .then(data => {
-          if (data.thumbnail && data.thumbnail.source) {
-            const src = data.thumbnail.source.replace(/\/\d+px-/, '/640px-');
-            r._photoUrl = src;
-            imgEl.outerHTML = `<img src="${src}" style="width:100%;height:130px;object-fit:cover;display:block">`;
-          } else {
-            imgEl.textContent = 'No photo available';
-          }
-        })
-        .catch(() => { if (imgEl) imgEl.textContent = 'Photo unavailable'; });
-    });
 
     marker.on('click', () => selectResult(r.id));
   });
@@ -1851,9 +1851,11 @@ async function exportDeck() {
   const locationSlides = results.map((r, i) => {
     const matchWidth = r.matchScore + '%';
     const tags = (r.tags || []).map(t => `<span class="dtag">${t}</span>`).join('');
+    // Use <img crossorigin="anonymous"> — Wikipedia blocks background-image CSS hotlinks
+    // but allows CORS image requests
     const photoHtml = r._photoUrl
-      ? `<div class="loc-photo" style="background-image:url('${r._photoUrl}')"></div>`
-      : `<div class="loc-photo loc-photo-empty"></div>`;
+      ? `<div class="loc-photo-wrap"><img class="loc-photo-img" src="${r._photoUrl}" crossorigin="anonymous" alt="${r.name}" onerror="this.parentElement.style.background='#e8e4dc';this.style.display='none'"></div>`
+      : `<div class="loc-photo-wrap loc-photo-empty"></div>`;
     return `
     <div class="slide loc-slide" id="slide-${i+2}">
       <div class="slide-num">${String(i+2).padStart(2,'0')} / ${String(results.length+3).padStart(2,'0')}</div>
@@ -1930,8 +1932,8 @@ async function exportDeck() {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SCOUT — Location Report: ${searchDesc}</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"><\/script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"><\/script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -2008,9 +2010,10 @@ html,body{height:100%;overflow:hidden;background:#000}
 /* ── LOCATION SLIDES ── */
 .loc-slide{background:var(--light)}
 .loc-header{display:grid;grid-template-columns:1fr 340px;gap:0;flex:1;min-height:0}
-.loc-photo{position:absolute;top:0;right:0;width:220px;height:180px;background-size:cover;background-position:center;z-index:0}
+.loc-photo-wrap{position:absolute;top:0;right:0;width:220px;height:180px;overflow:hidden;z-index:0;background:#e8e4dc}
+.loc-photo-img{width:100%;height:100%;object-fit:cover;display:block}
+.loc-photo-wrap::after{content:'';position:absolute;inset:0;background:linear-gradient(to left,transparent 0%,rgba(255,255,255,0.95) 60%)}
 .loc-photo-empty{background:#e8e4dc}
-.loc-photo::after{content:'';position:absolute;inset:0;background:linear-gradient(to left,transparent 0%,rgba(255,255,255,0.95) 60%)}
 .loc-slide{position:relative}
 .loc-left{position:relative;z-index:1;padding:36px 36px 24px;display:flex;flex-direction:column;gap:10px;border-right:1px solid var(--border)}
 .loc-index{font-family:var(--mono);font-size:0.6rem;letter-spacing:0.3em;color:var(--amber);text-transform:uppercase}
@@ -2211,7 +2214,6 @@ td{padding:9px 10px;color:var(--dark);vertical-align:middle}
 
 </div><!-- /deck -->
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"><\/script>
 <script>
 let currentSlide = 1;
 const totalSlides = ${results.length + 3};
