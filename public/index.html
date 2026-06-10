@@ -1818,7 +1818,7 @@ function showNotif(msg) {
 document.addEventListener('scroll', () => { if (map) map.invalidateSize(); }, { passive: true });
 
 // ── EXPORT DECK ────────────────────────────────────────────────────────────
-function exportDeck() {
+async function exportDeck() {
   if (!allResults || allResults.length === 0) {
     showNotif('Run a search first to export results');
     return;
